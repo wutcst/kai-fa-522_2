@@ -14,14 +14,10 @@ Snake3D 是一款基于 **Three.js** 的 3D 贪吃蛇网页游戏。玩家在 18
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| 构建工具 | Maven | 项目管理与自动化构建 |
-| 后端服务 | JDK HttpServer | 内置 HTTP 服务器（零外部依赖） |
-| 3D 渲染 | Three.js r160 | 3D 场景渲染 |
-| 前端 | HTML5 + CSS3 + JavaScript (ES Module) | 游戏 UI 与交互 |
-
-### 游戏截图
-
-> 启动游戏后访问 `http://localhost:8080` 即可体验。
+| 运行时 | Node.js 18+ | 服务端运行时 |
+| 服务端 | Node.js 内置 http 模块 | 静态文件服务器（零外部依赖） |
+| 3D 渲染 | Three.js r160 | 3D 场景渲染（CDN 加载） |
+| 前端 | HTML5 + CSS3 + 原生 JavaScript | 游戏 UI 与交互 |
 
 ---
 
@@ -29,24 +25,19 @@ Snake3D 是一款基于 **Three.js** 的 3D 贪吃蛇网页游戏。玩家在 18
 
 ### 环境要求
 
-- JDK 8 或更高版本
-- Maven 3.6 或更高版本
+- Node.js 18 或更高版本
 - 现代浏览器（Chrome / Firefox / Edge / Safari）
 
-### 编译与运行
+### 运行
 
 ```bash
-# 1. 克隆仓库
-git clone <repo-url>
-cd kai-fa-522_2
+# 启动游戏服务器
+node server.js
 
-# 2. 编译项目
-mvn clean compile
+# 或使用 npm
+npm start
 
-# 3. 运行游戏服务器
-mvn exec:java -Dexec.mainClass="cn.edu.whut.sept.GameServer"
-
-# 4. 打开浏览器访问
+# 浏览器打开
 # http://localhost:8080
 ```
 
@@ -65,23 +56,20 @@ mvn exec:java -Dexec.mainClass="cn.edu.whut.sept.GameServer"
 
 ```
 kai-fa-522_2/
-├── pom.xml                     # Maven 配置
-├── README.md                   # 项目说明
-├── .github/workflows/ci.yml    # GitHub Actions CI
-├── .workbuddy/rules/           # AI 开发约束规则
-├── src/
-│   ├── main/java/.../
-│   │   └── GameServer.java     # HTTP 服务器
-│   ├── main/resources/web/
-│   │   ├── index.html          # 游戏页面
-│   │   ├── css/style.css       # 样式
-│   │   └── js/
-│   │       ├── game-core.js    # 游戏核心逻辑
-│   │       ├── scene.js        # 3D 场景渲染
-│   │       └── main.js         # 主入口
-│   └── test/java/.../
-│       └── GameServerTest.java # 单元测试
-└── REPORT.docx                 # 实训报告
+├── server.js                    # Node.js HTTP 服务器
+├── package.json                 # 项目元信息
+├── README.md                    # 项目说明
+├── .github/workflows/ci.yml     # GitHub Actions CI
+├── .workbuddy/rules/            # AI 开发约束规则
+├── .gitignore
+├── REPORT.docx                  # 实训报告
+└── src/main/resources/web/
+    ├── index.html               # 游戏页面
+    ├── css/style.css            # 样式
+    └── js/
+        ├── game-core.js         # 游戏核心逻辑
+        ├── scene.js             # 3D 场景渲染
+        └── main.js              # 主入口
 ```
 
 ---
@@ -100,23 +88,19 @@ kai-fa-522_2/
 
 ## 小组分工
 
-| 成员 | 角色 | 负责模块 | 分支 |
-|------|------|---------|------|
-| 成员A | 组长 | 游戏核心逻辑、项目集成 | `main` / `feature/game-logic` |
-| 成员B | 开发 | 3D 场景渲染、粒子特效 | `feature/3d-render` |
-| 成员C | 开发 | HTTP 服务器、UI 界面、CI/CD | `feature/server-ui` |
+| 成员 | GitHub | 角色 | 负责模块 | 分支 |
+|------|--------|------|---------|------|
+| 陈健韬 | jettychen | 组长 | 项目初始化、游戏核心逻辑、集成合并 | master / feature/game-logic |
+| 成员B | cantabile-g | 开发 | Three.js 3D场景渲染、粒子特效 | feature/3d-render |
+| 成员C | jet-isnt-haha | 开发 | HTTP服务器、UI界面、CI/CD、文档 | feature/server-ui |
 
 ---
 
 ## CI/CD
 
-项目使用 GitHub Actions 进行持续集成：
+项目使用 GitHub Actions 进行持续集成。
 
-- **编译检查**: `mvn compile` 确保代码可编译
-- **单元测试**: `mvn test` 运行测试用例
-- **打包**: `mvn package` 生成可执行 JAR 文件
-
-每次 push 或 PR 到 `main` 分支时自动触发上述流程。
+每次 push 或 PR 到 `master` 分支时自动触发代码检查。
 
 ---
 

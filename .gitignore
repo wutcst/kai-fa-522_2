@@ -1,10 +1,13 @@
-# 忽略以下目录中的所有子目录及文件
-/target/*
-/.idea/*
+# Node.js
+node_modules/
 
-# 忽略以下文件
-*.iml
+# OS
 .DS_Store
+
+# IDE
+.idea/
+*.iml
+
 # AI 开发约束规则（提交到仓库供大模型读取）
 !.workbuddy/rules/
 # 工作记忆（本地私有，不入库）

@@ -1,0 +1,12 @@
+{
+  "name": "snake3d",
+  "version": "1.0.0",
+  "description": "3D Snake Game — 软件工程实践（二）小组协同开发项目",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-game.js"
+  },
+  "keywords": ["threejs", "snake", "game", "3d"],
+  "license": "MIT"
+}
