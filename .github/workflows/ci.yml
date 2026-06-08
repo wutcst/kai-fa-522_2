@@ -1,0 +1,33 @@
+name: Snake3D CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  check:
+    name: Code Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Verify server.js syntax
+        run: node --check server.js
+
+      - name: Verify game-core.js syntax
+        run: node --check src/main/resources/web/js/game-core.js
+
+      - name: Verify scene.js syntax
+        run: node --check src/main/resources/web/js/scene.js
+
+      - name: Verify main.js syntax
+        run: node --check src/main/resources/web/js/main.js
