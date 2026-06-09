@@ -1,8 +1,7 @@
 /**
- * main.js — Snake3D 主入口（支持单/双人模式）
+ * main.js — Snake3D 主入口（RAF游戏循环+灵敏度优化）
  *
- * [成员C — 入口 + UI 绑定]
- * 依赖：GameEngine, Scene3D
+ * [成员A — 入口 + UI 绑定]
  */
 
 (function () {
@@ -23,8 +22,13 @@
     var btnRestart = document.getElementById('btn-restart');
     var selGridSize = document.getElementById('sel-grid-size');
     var selTheme = document.getElementById('sel-theme');
+    var selDifficulty = document.getElementById('sel-difficulty');
 
-    var gameTimer = null;
+    // RAF 游戏循环
+    var rafId = null;
+    var accumulator = 0;
+    var lastTime = 0;
+    var gameSpeed = 180;
     var highScore = 0;
     var isTwoPlayer = false;
 
@@ -38,6 +42,7 @@
 
         GameEngine.on('onUpdate', function (state) {
             Scene3D.update(state);
+            gameSpeed = state.speed;
         });
 
         GameEngine.on('onScoreChange', function (data) {
@@ -55,13 +60,10 @@
         });
 
         GameEngine.on('onEatItem', function (data) {
-            // 道具粒子
             if (data && data.pos) Scene3D.emitFoodParticles(data.pos);
         });
 
-        GameEngine.on('onSnakeDie', function (playerNum) {
-            // 双人模式淘汰特效（闪烁处理在渲染侧）
-        });
+        GameEngine.on('onSnakeDie', function () {});
 
         GameEngine.on('onGameOver', function (result) {
             stopGameLoop();
@@ -96,17 +98,17 @@
 
     function startGame(mode) {
         isTwoPlayer = (mode === 'twoPlayer');
-        // 应用地图设置
         var gs = parseInt(selGridSize.value, 10) || 18;
         GameEngine.setGridSize(gs);
         GameEngine.setTheme(selTheme.value || 'dark');
+        GameEngine.setDifficulty(selDifficulty.value || 'normal');
         GameEngine.setMode(isTwoPlayer ? GameEngine.MODE.TWO_PLAYER : GameEngine.MODE.SINGLE);
         GameEngine.start();
         scoreDisplay.textContent = '0';
         if (score2Display) score2Display.textContent = '0';
         updateSpeed(0);
-        // 双人模式显示两个分数
         document.getElementById('hud-p2').style.display = isTwoPlayer ? 'block' : 'none';
+        gameSpeed = GameEngine.getSpeed();
         startGameLoop();
     }
 
@@ -114,16 +116,37 @@
         startGame(isTwoPlayer ? 'twoPlayer' : 'single');
     }
 
+    // RAF 驱动游戏循环，累加器模式
     function startGameLoop() {
         stopGameLoop();
-        gameTimer = setInterval(function () {
+        accumulator = 0;
+        lastTime = performance.now();
+        rafId = requestAnimationFrame(gameLoop);
+    }
+
+    function gameLoop(timestamp) {
+        if (!timestamp) timestamp = performance.now();
+        var dt = timestamp - lastTime;
+        lastTime = timestamp;
+        accumulator += dt;
+
+        // 消耗累积时间，每次 tick 消耗 gameSpeed ms
+        var ticked = false;
+        while (accumulator >= gameSpeed) {
+            accumulator -= gameSpeed;
             var alive = GameEngine.tick();
-            if (!alive) stopGameLoop();
-        }, GameEngine.getSpeed());
+            ticked = true;
+            if (!alive) {
+                stopGameLoop();
+                return;
+            }
+        }
+
+        rafId = requestAnimationFrame(gameLoop);
     }
 
     function stopGameLoop() {
-        if (gameTimer) { clearInterval(gameTimer); gameTimer = null; }
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     }
 
     function updateSpeed(score) {
@@ -131,11 +154,7 @@
         speedDisplay.textContent = 'Lv.' + (Math.floor(s / 50) + 1);
     }
 
-    function showOverlay(overlay) {
-        hideAllOverlays();
-        overlay.style.display = 'flex';
-    }
-
+    function showOverlay(overlay) { hideAllOverlays(); overlay.style.display = 'flex'; }
     function hideAllOverlays() {
         overlayStart.style.display = 'none';
         overlayOver.style.display = 'none';
@@ -146,23 +165,27 @@
     document.addEventListener('keydown', function (e) {
         var state = GameEngine.getState();
         var twoP = GameEngine.getMode() === GameEngine.MODE.TWO_PLAYER;
-        var alive1 = GameEngine.isAlive1 ? GameEngine.isAlive1() : true;
-        var alive2 = GameEngine.isAlive2 ? GameEngine.isAlive2() : true;
+        var al1 = GameEngine.isAlive1 ? GameEngine.isAlive1() : true;
+        var al2 = GameEngine.isAlive2 ? GameEngine.isAlive2() : true;
 
-        // Space
         if (e.code === 'Space' || e.key === ' ') {
             e.preventDefault();
             if (state === GameEngine.STATE.IDLE) { startGame('single'); return; }
             if (state === GameEngine.STATE.OVER) { restartGame(); return; }
             if (state === GameEngine.STATE.PLAYING || state === GameEngine.STATE.PAUSED) {
-                GameEngine.togglePause(); return;
+                GameEngine.togglePause();
+                if (GameEngine.getState() === GameEngine.STATE.PLAYING) {
+                    lastTime = performance.now();
+                    accumulator = 0;
+                    rafId = requestAnimationFrame(gameLoop);
+                }
+                return;
             }
         }
 
         if (state !== GameEngine.STATE.PLAYING) return;
 
-        // P1: WASD
-        if (alive1) {
+        if (al1) {
             switch (e.code) {
                 case 'KeyW': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.UP); break;
                 case 'KeyS': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.DOWN); break;
@@ -170,9 +193,7 @@
                 case 'KeyD': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.RIGHT); break;
             }
         }
-
-        // P2: Arrow keys (only in two-player mode)
-        if (twoP && alive2) {
+        if (twoP && al2) {
             switch (e.code) {
                 case 'ArrowUp':    e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.UP); break;
                 case 'ArrowDown':  e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.DOWN); break;
@@ -186,22 +207,18 @@
     btnStart2P.addEventListener('click', function() { startGame('twoPlayer'); });
     btnRestart.addEventListener('click', restartGame);
 
-    // 移动端触摸（单人模式）
     var touchStartX = 0, touchStartY = 0;
     gameContainer.addEventListener('touchstart', function (e) {
-        var touch = e.touches[0];
-        touchStartX = touch.clientX;
-        touchStartY = touch.clientY;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
     });
-
     gameContainer.addEventListener('touchend', function (e) {
         var state = GameEngine.getState();
         if (state === GameEngine.STATE.IDLE) { startGame('single'); return; }
         if (state === GameEngine.STATE.OVER) { restartGame(); return; }
         if (state !== GameEngine.STATE.PLAYING) return;
-        var touch = e.changedTouches[0];
-        var dx = touch.clientX - touchStartX;
-        var dy = touch.clientY - touchStartY;
+        var dx = e.changedTouches[0].clientX - touchStartX;
+        var dy = e.changedTouches[0].clientY - touchStartY;
         if (Math.abs(dx) > Math.abs(dy)) {
             GameEngine.setDirection(dx > 0 ? GameEngine.DIR.RIGHT : GameEngine.DIR.LEFT);
         } else {
