@@ -56,6 +56,9 @@
                 scoreDisplay.textContent = data;
             }
             updateSpeed(typeof data === 'object' ? data.score : data);
+            if (data && data.combo >= 1) {
+                showItemToastExt('COMBO x' + (1 + data.combo * 0.5) + '!', '#ffd700');
+            }
         });
 
         GameEngine.on('onEatFood', function (pos) {
@@ -110,6 +113,18 @@
         itemToast.offsetHeight;
         itemToast.style.animation = 'toastFade 1.5s ease-out forwards';
         toastTimer = setTimeout(function() { itemToast.style.display = 'none'; }, 1400);
+    }
+
+    function showItemToastExt(msg, color) {
+        if (toastTimer) clearTimeout(toastTimer);
+        itemToast.textContent = msg;
+        itemToast.className = 'item-toast';
+        itemToast.style.color = color;
+        itemToast.style.display = 'block';
+        itemToast.style.animation = 'none';
+        itemToast.offsetHeight;
+        itemToast.style.animation = 'toastFade 1.2s ease-out forwards';
+        toastTimer = setTimeout(function() { itemToast.style.display = 'none'; }, 1100);
     }
 
     function startGame(mode) {

@@ -481,7 +481,9 @@ var GameEngine = (function () {
             gridSize: GRID_SIZE,
             items: items.slice(), obstacles: obstacles.slice(),
             shield1: shield1, shield2: shield2,
-            doubleScore1: doubleScore1, doubleScore2: doubleScore2
+            doubleScore1: doubleScore1, doubleScore2: doubleScore2,
+            portals: getPortals(), isGhost1: ghostMode1, isGhost2: ghostMode2,
+            combo: combo
         };
     }
 
