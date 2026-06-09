@@ -1,307 +1,312 @@
 /**
- * game-core.js — Snake3D 游戏核心逻辑
+ * game-core.js — Snake3D 游戏核心逻辑（支持单/双人模式）
  *
- * [成员A — 游戏核心逻辑]
- * 纯逻辑模块，不依赖 Three.js，只依赖纯数据操作。
+ * [成员D — 游戏核心逻辑]
+ * 纯逻辑模块，不依赖 Three.js。
  *
- * 游戏规则：
- *   - 18x18 网格棋盘
- *   - 蛇初始 3 节，方向向右
- *   - 吃食物 +10 分，蛇身增长 1 节
+ * 单人模式：
+ *   - 18x18 网格，蛇初始 3 节，吃食物 +10 分
  *   - 撞墙或撞自己 → 游戏结束
- *   - 速度随分数递增（180ms → 60ms 最低）
  *
- * 对外接口：
- *   GameEngine.init()      — 初始化
- *   GameEngine.start()     — 开始游戏
- *   GameEngine.pause()     — 暂停/继续
- *   GameEngine.restart()   — 重新开始
- *   GameEngine.tick()      — 每帧更新（由外部定时器调用）
- *   GameEngine.setDirection(dir) — 设置方向
+ * 双人模式（对抗）：
+ *   - P1: WASD 绿色蛇，P2: 方向键 蓝色蛇
+ *   - 共享食物池，撞任何蛇身或墙 → 死亡
+ *   - 最先淘汰者输，最后存活者获胜
+ *   - 同时死亡 → 平局
  */
 
 var GameEngine = (function () {
     'use strict';
 
-    // === 常量 ===
-    const GRID_SIZE = 18;
-    const INITIAL_SPEED = 180;
-    const MIN_SPEED = 60;
-    const SPEED_STEP = 10;
-    const FOOD_PER_SPEEDUP = 5;
-    const SCORE_PER_FOOD = 10;
+    var GRID_SIZE = 18;
+    var INITIAL_SPEED = 180;
+    var MIN_SPEED = 60;
+    var SPEED_STEP = 10;
+    var FOOD_PER_SPEEDUP = 5;
+    var SCORE_PER_FOOD = 10;
 
-    // === 游戏状态枚举 ===
-    const STATE = { IDLE: 'idle', PLAYING: 'playing', PAUSED: 'paused', OVER: 'over' };
+    var STATE = { IDLE: 'idle', PLAYING: 'playing', PAUSED: 'paused', OVER: 'over' };
+    var MODE = { SINGLE: 'single', TWO_PLAYER: 'twoPlayer' };
 
-    // === 方向枚举 ===
-    const DIR = {
+    var DIR = {
         UP:    { x:  0, z: -1 },
         DOWN:  { x:  0, z:  1 },
         LEFT:  { x: -1, z:  0 },
         RIGHT: { x:  1, z:  0 }
     };
 
-    // === 内部状态 ===
-    let snake = [];           // [{x, z}, ...] head 在 index 0
-    let direction = null;     // 当前方向
-    let nextDirection = null; // 缓冲方向（防止同帧反向）
-    let food = null;          // {x, z}
-    let score = 0;
-    let speed = INITIAL_SPEED;
-    let state = STATE.IDLE;
+    // === 游戏模式 ===
+    var mode = MODE.SINGLE;
 
-    // === 回调注册 ===
-    let callbacks = {
-        onUpdate: null,       // function(state) 每次状态变更
-        onScoreChange: null,  // function(score) 分数变化
-        onGameOver: null,     // function(score) 游戏结束
-        onEatFood: null,      // function(pos) 吃到食物
-        onStateChange: null   // function(newState) 状态变更
+    // === 玩家1 状态 ===
+    var snake1 = [];
+    var direction1 = null;
+    var nextDirection1 = null;
+    var score1 = 0;
+    var alive1 = true;
+
+    // === 玩家2 状态（双人模式） ===
+    var snake2 = [];
+    var direction2 = null;
+    var nextDirection2 = null;
+    var score2 = 0;
+    var alive2 = true;
+
+    var food = null;
+    var speed = INITIAL_SPEED;
+    var state = STATE.IDLE;
+    var winner = null; // 1=玩家1胜, 2=玩家2胜, 0=平局
+
+    var callbacks = {
+        onUpdate: null,
+        onScoreChange: null,
+        onGameOver: null,
+        onEatFood: null,
+        onStateChange: null,
+        onSnakeDie: null
     };
 
-    // === 公开接口 ===
+    // === API ===
+    function getGridSize() { return GRID_SIZE; }
+    function getSnake() { return snake1.slice(); }
+    function getSnake2() { return snake2.slice(); }
+    function getFood() { return food ? { x: food.x, z: food.z } : null; }
+    function getScore() { return score1; }
+    function getScore2() { return score2; }
+    function getSpeed() { return speed; }
+    function getState() { return state; }
+    function getMode() { return mode; }
+    function getWinner() { return winner; }
+    function isAlive1() { return alive1; }
+    function isAlive2() { return alive2; }
 
-    function getGridSize() {
-        return GRID_SIZE;
-    }
+    function on(event, callback) { callbacks[event] = callback; }
 
-    function getSnake() {
-        return snake.slice(); // 返回拷贝
-    }
+    function setMode(m) { mode = m; }
 
-    function getFood() {
-        return food ? Object.assign({}, food) : null;
-    }
-
-    function getScore() {
-        return score;
-    }
-
-    function getSpeed() {
-        return speed;
-    }
-
-    function getState() {
-        return state;
-    }
-
-    function getDirection() {
-        return direction ? Object.assign({}, direction) : null;
-    }
-
-    function on(event, callback) {
-        callbacks[event] = callback;
-    }
-
-    /**
-     * 初始化游戏状态
-     */
     function init() {
-        const center = Math.floor(GRID_SIZE / 2);
-        snake = [
-            { x: center, z: center },
+        var center = Math.floor(GRID_SIZE / 2);
+        // 玩家1：中间偏左
+        snake1 = [
             { x: center - 1, z: center },
-            { x: center - 2, z: center }
+            { x: center - 2, z: center },
+            { x: center - 3, z: center }
         ];
-        direction = DIR.RIGHT;
-        nextDirection = DIR.RIGHT;
-        score = 0;
+        direction1 = DIR.RIGHT;
+        nextDirection1 = DIR.RIGHT;
+        score1 = 0;
+        alive1 = true;
+
+        // 玩家2：中间偏右，方向向左
+        snake2 = [
+            { x: center + 1, z: center },
+            { x: center + 2, z: center },
+            { x: center + 3, z: center }
+        ];
+        direction2 = DIR.LEFT;
+        nextDirection2 = DIR.LEFT;
+        score2 = 0;
+        alive2 = true;
+
+        winner = null;
         speed = INITIAL_SPEED;
         state = STATE.IDLE;
         placeFood();
-        fireCallback('onUpdate', getPublicState());
-        fireCallback('onStateChange', state);
+        fire('onUpdate', getPublicState());
+        fire('onStateChange', state);
     }
 
-    /**
-     * 开始 / 重新开始游戏
-     */
     function start() {
         if (state === STATE.OVER || state === STATE.IDLE) {
             init();
         }
         state = STATE.PLAYING;
-        fireCallback('onStateChange', state);
-        fireCallback('onUpdate', getPublicState());
+        fire('onStateChange', state);
+        fire('onUpdate', getPublicState());
     }
 
-    /**
-     * 暂停 / 继续切换
-     */
     function togglePause() {
-        if (state === STATE.PLAYING) {
-            state = STATE.PAUSED;
-        } else if (state === STATE.PAUSED) {
-            state = STATE.PLAYING;
-        }
-        fireCallback('onStateChange', state);
+        if (state === STATE.PLAYING) state = STATE.PAUSED;
+        else if (state === STATE.PAUSED) state = STATE.PLAYING;
+        fire('onStateChange', state);
     }
 
-    /**
-     * 重新开始
-     */
-    function restart() {
-        init();
-        start();
-    }
+    function restart() { init(); start(); }
 
-    /**
-     * 设置方向（自动防止反向）
-     */
-    function setDirection(dir) {
+    function setDirection(dir) { setDirectionFor(dir, 1); }
+    function setDirectionP2(dir) { setDirectionFor(dir, 2); }
+
+    function setDirectionFor(dir, player) {
         if (state !== STATE.PLAYING) return;
         if (!dir || (dir.x === 0 && dir.z === 0)) return;
+        if (player === 1 && !alive1) return;
+        if (player === 2 && !alive2) return;
 
-        // 防止反向：不能掉头
-        if (direction) {
-            if (dir.x === -direction.x && dir.z === -direction.z) return;
-        }
-        nextDirection = dir;
+        var curDir = player === 1 ? direction1 : direction2;
+        if (curDir && dir.x === -curDir.x && dir.z === -curDir.z) return;
+
+        if (player === 1) nextDirection1 = dir;
+        else nextDirection2 = dir;
     }
 
-    /**
-     * 每步逻辑更新（由外部定时器驱动）
-     * 返回 false 表示游戏结束
-     */
     function tick() {
         if (state !== STATE.PLAYING) return true;
 
         // 应用缓冲方向
-        if (nextDirection) {
-            direction = nextDirection;
+        if (nextDirection1) direction1 = nextDirection1;
+        if (nextDirection2) direction2 = nextDirection2;
+
+        // === 移动玩家1 ===
+        if (alive1) {
+            moveSnake(1, snake1, direction1, nextDirection1);
         }
 
-        // 计算新头部位置
-        const head = snake[0];
-        const newHead = {
-            x: head.x + direction.x,
-            z: head.z + direction.z
-        };
-
-        // 撞墙检测
-        if (newHead.x < 0 || newHead.x >= GRID_SIZE ||
-            newHead.z < 0 || newHead.z >= GRID_SIZE) {
-            endGame();
-            return false;
+        // === 移动玩家2 ===
+        if (mode === MODE.TWO_PLAYER && alive2) {
+            moveSnake(2, snake2, direction2, nextDirection2);
         }
 
-        // 撞自己检测（跳过最后一节，因为马上要删掉）
-        for (let i = 0; i < snake.length - 1; i++) {
-            if (snake[i].x === newHead.x && snake[i].z === newHead.z) {
+        // === 检查对战结束 ===
+        if (mode === MODE.TWO_PLAYER) {
+            if (!alive1 && !alive2) {
+                winner = 0; // 平局
+                endGame();
+                return false;
+            } else if (!alive1 && alive2) {
+                winner = 2;
+                endGame();
+                return false;
+            } else if (alive1 && !alive2) {
+                winner = 1;
                 endGame();
                 return false;
             }
         }
 
-        // 移动：头部插入
-        snake.unshift(newHead);
-
-        // 吃食物检测
-        if (food && newHead.x === food.x && newHead.z === food.z) {
-            score += SCORE_PER_FOOD;
-            fireCallback('onScoreChange', score);
-            fireCallback('onEatFood', food);
-
-            // 速度递增
-            let foodEaten = Math.floor(score / SCORE_PER_FOOD);
-            if (foodEaten > 0 && foodEaten % FOOD_PER_SPEEDUP === 0) {
-                speed = Math.max(MIN_SPEED, INITIAL_SPEED - (foodEaten / FOOD_PER_SPEEDUP) * SPEED_STEP);
-            }
-
-            placeFood();
-            // 不吃就删尾巴（已经 unshift 了新头）
-        } else {
-            snake.pop();
-        }
-
-        fireCallback('onUpdate', getPublicState());
-        return true;
+        fire('onUpdate', getPublicState());
+        return state !== STATE.OVER;
     }
 
-    /**
-     * 随机放置食物（确保不在蛇身上）
-     */
-    function placeFood() {
-        const occupied = new Set(snake.map(s => s.x + ',' + s.z));
+    function moveSnake(playerNum, snakeArr, dir, nextDir) {
+        if (nextDir) dir = nextDir;
+        var head = snakeArr[0];
+        var newHead = { x: head.x + dir.x, z: head.z + dir.z };
 
-        // 格子全满 → 胜利
-        if (occupied.size >= GRID_SIZE * GRID_SIZE) {
-            food = null;
+        // 撞墙
+        if (newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.z < 0 || newHead.z >= GRID_SIZE) {
+            killPlayer(playerNum);
             return;
         }
 
-        let attempts = 0;
-        while (attempts < 100) {
-            const x = Math.floor(Math.random() * GRID_SIZE);
-            const z = Math.floor(Math.random() * GRID_SIZE);
-            if (!occupied.has(x + ',' + z)) {
-                food = { x: x, z: z };
+        // 撞自己
+        for (var i = 0; i < snakeArr.length - 1; i++) {
+            if (snakeArr[i].x === newHead.x && snakeArr[i].z === newHead.z) {
+                killPlayer(playerNum);
                 return;
             }
-            attempts++;
         }
 
-        // 兜底：扫描所有空位
-        for (let x = 0; x < GRID_SIZE; x++) {
-            for (let z = 0; z < GRID_SIZE; z++) {
-                if (!occupied.has(x + ',' + z)) {
-                    food = { x: x, z: z };
+        // 撞对方蛇（双人模式）
+        if (mode === MODE.TWO_PLAYER) {
+            var otherSnake = playerNum === 1 ? snake2 : snake1;
+            for (var j = 0; j < otherSnake.length; j++) {
+                if (otherSnake[j].x === newHead.x && otherSnake[j].z === newHead.z) {
+                    killPlayer(playerNum);
                     return;
                 }
             }
+        }
+
+        // 移动
+        snakeArr.unshift(newHead);
+
+        // 吃食物
+        if (food && newHead.x === food.x && newHead.z === food.z) {
+            if (playerNum === 1) {
+                score1 += SCORE_PER_FOOD;
+                fire('onScoreChange', { player: 1, score: score1 });
+            } else {
+                score2 += SCORE_PER_FOOD;
+                fire('onScoreChange', { player: 2, score: score2 });
+            }
+            fire('onEatFood', food);
+
+            var foodEaten = Math.floor((score1 + score2) / SCORE_PER_FOOD);
+            if (foodEaten > 0 && foodEaten % FOOD_PER_SPEEDUP === 0) {
+                speed = Math.max(MIN_SPEED, INITIAL_SPEED - Math.floor(foodEaten / FOOD_PER_SPEEDUP) * SPEED_STEP);
+            }
+            placeFood();
+        } else {
+            snakeArr.pop();
+        }
+    }
+
+    function killPlayer(playerNum) {
+        if (playerNum === 1) {
+            alive1 = false;
+            snake1 = [];
+        } else {
+            alive2 = false;
+            snake2 = [];
+        }
+        fire('onSnakeDie', playerNum);
+    }
+
+    function placeFood() {
+        var occupied = {};
+        snake1.forEach(function(s) { occupied[s.x + ',' + s.z] = true; });
+        snake2.forEach(function(s) { occupied[s.x + ',' + s.z] = true; });
+
+        if (Object.keys(occupied).length >= GRID_SIZE * GRID_SIZE) { food = null; return; }
+
+        for (var tries = 0; tries < 200; tries++) {
+            var x = Math.floor(Math.random() * GRID_SIZE);
+            var z = Math.floor(Math.random() * GRID_SIZE);
+            if (!occupied[x + ',' + z]) { food = { x: x, z: z }; return; }
         }
         food = null;
     }
 
     function endGame() {
         state = STATE.OVER;
-        fireCallback('onGameOver', score);
-        fireCallback('onStateChange', state);
+        fire('onGameOver', mode === MODE.TWO_PLAYER ? { winner: winner } : score1);
+        fire('onStateChange', state);
     }
 
-    function fireCallback(name, data) {
+    function fire(name, data) {
         if (callbacks[name]) {
-            try {
-                callbacks[name](data);
-            } catch (e) {
-                console.error('GameEngine callback error [' + name + ']:', e);
-            }
+            try { callbacks[name](data); } catch (e) { console.error('GameEngine callback error:', e); }
         }
     }
 
     function getPublicState() {
-        return {
-            snake: snake.slice(),
-            food: food ? Object.assign({}, food) : null,
-            score: score,
+        var s = {
+            snake: snake1.slice(),
+            snake2: snake2.slice(),
+            food: food ? { x: food.x, z: food.z } : null,
+            score: score1,
+            score2: score2,
             speed: speed,
             state: state,
-            direction: direction ? Object.assign({}, direction) : null,
+            mode: mode,
+            winner: winner,
+            alive1: alive1,
+            alive2: alive2,
             gridSize: GRID_SIZE
         };
+        return s;
     }
 
-    // 初始状态
     init();
 
-    // === 暴露公开 API ===
     return {
-        init: init,
-        start: start,
-        togglePause: togglePause,
-        restart: restart,
-        tick: tick,
-        setDirection: setDirection,
-        getGridSize: getGridSize,
-        getSnake: getSnake,
-        getFood: getFood,
-        getScore: getScore,
-        getSpeed: getSpeed,
-        getState: getState,
-        getDirection: getDirection,
-        on: on,
-        STATE: STATE,
-        DIR: DIR
+        init: init, start: start, togglePause: togglePause, restart: restart,
+        tick: tick, setDirection: setDirection, setDirectionP2: setDirectionP2,
+        setMode: setMode, getMode: getMode, getWinner: getWinner,
+        getGridSize: getGridSize, getSnake: getSnake, getSnake2: getSnake2,
+        getFood: getFood, getScore: getScore, getScore2: getScore2,
+        getSpeed: getSpeed, getState: getState,
+        isAlive1: isAlive1, isAlive2: isAlive2,
+        on: on, STATE: STATE, MODE: MODE, DIR: DIR
     };
 })();
