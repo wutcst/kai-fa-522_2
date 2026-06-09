@@ -1,8 +1,8 @@
 /**
- * scene.js — Snake3D Three.js 场景渲染
+ * scene.js — Snake3D Three.js 场景渲染（支持双人）
  *
  * [成员B — 3D 场景渲染]
- * 职责：Three.js 场景搭建、蛇身渲染、食物渲染、
+ * 职责：Three.js 场景搭建、双蛇渲染、食物渲染、
  *       网格地板、相机控制、粒子特效
  *
  * 依赖：Three.js (CDN 全局), GameEngine
@@ -12,7 +12,8 @@ var Scene3D = (function () {
     'use strict';
 
     var scene, camera, renderer;
-    var snakeMeshes = [];
+    var snakeMeshes1 = [];
+    var snakeMeshes2 = [];
     var foodMesh = null;
     var gridGroup = null;
     var floorPlane = null;
@@ -23,8 +24,10 @@ var Scene3D = (function () {
     var CENTER_OFFSET = (GRID_SIZE - 1) / 2;
     var SNAKE_Y = 0.25;
     var FOOD_Y = 0.4;
-    var HEAD_COLOR = 0xffd700;
-    var BODY_COLOR = 0x4caf50;
+    var HEAD_COLOR_1 = 0xffd700;
+    var BODY_COLOR_1 = 0x4caf50;
+    var HEAD_COLOR_2 = 0xffd700;
+    var BODY_COLOR_2 = 0x2196F3;
     var FOOD_COLOR = 0xff4444;
 
     function init(container) {
@@ -67,9 +70,7 @@ var Scene3D = (function () {
     function createFloor() {
         var geometry = new THREE.PlaneGeometry(GRID_SIZE + 2, GRID_SIZE + 2);
         var material = new THREE.MeshStandardMaterial({
-            color: 0x1a1a2e,
-            roughness: 0.9,
-            metalness: 0.1
+            color: 0x1a1a2e, roughness: 0.9, metalness: 0.1
         });
         floorPlane = new THREE.Mesh(geometry, material);
         floorPlane.rotation.x = -Math.PI / 2;
@@ -81,9 +82,7 @@ var Scene3D = (function () {
     function createGrid() {
         gridGroup = new THREE.Group();
         var lineMaterial = new THREE.LineBasicMaterial({
-            color: 0x334455,
-            transparent: true,
-            opacity: 0.3
+            color: 0x334455, transparent: true, opacity: 0.3
         });
         var half = GRID_SIZE / 2;
         for (var i = 0; i <= GRID_SIZE; i++) {
@@ -111,14 +110,12 @@ var Scene3D = (function () {
         return new THREE.Vector3(gx - CENTER_OFFSET, y || 0, gz - CENTER_OFFSET);
     }
 
-    function createSnakeSegment(isHead, colorOverride) {
+    function createSnakeSegment(isHead, headColor, bodyColor) {
         var size = 0.85;
         var geometry = new THREE.BoxGeometry(size, size * 0.7, size);
-        var color = colorOverride || (isHead ? HEAD_COLOR : BODY_COLOR);
+        var color = isHead ? (headColor || HEAD_COLOR_1) : (bodyColor || BODY_COLOR_1);
         var material = new THREE.MeshStandardMaterial({
-            color: color,
-            roughness: 0.3,
-            metalness: 0.4,
+            color: color, roughness: 0.3, metalness: 0.4,
             emissive: isHead ? color : 0x000000,
             emissiveIntensity: isHead ? 0.6 : 0
         });
@@ -131,11 +128,8 @@ var Scene3D = (function () {
     function createFoodMesh() {
         var geometry = new THREE.OctahedronGeometry(0.35, 0);
         var material = new THREE.MeshStandardMaterial({
-            color: FOOD_COLOR,
-            roughness: 0.2,
-            metalness: 0.5,
-            emissive: FOOD_COLOR,
-            emissiveIntensity: 0.8
+            color: FOOD_COLOR, roughness: 0.2, metalness: 0.5,
+            emissive: FOOD_COLOR, emissiveIntensity: 0.8
         });
         var mesh = new THREE.Mesh(geometry, material);
         mesh.castShadow = true;
@@ -143,22 +137,20 @@ var Scene3D = (function () {
         return mesh;
     }
 
-    function spawnParticles(worldPos) {
+    function spawnParticles(worldPos, colorHint) {
         var count = 12;
         var particleGroup = new THREE.Group();
         for (var i = 0; i < count; i++) {
             var size = 0.05 + Math.random() * 0.1;
             var geometry = new THREE.SphereGeometry(size, 4, 4);
-            var hue = Math.random();
-            var color = new THREE.Color().setHSL(hue, 0.8, 0.6);
+            var hue = colorHint !== undefined ? (colorHint + Math.random() * 0.1) : Math.random();
+            var color = new THREE.Color().setHSL(hue % 1, 0.8, 0.6);
             var material = new THREE.MeshBasicMaterial({ color: color });
             var particle = new THREE.Mesh(geometry, material);
             particle.position.copy(worldPos);
             particle.userData = {
                 velocity: new THREE.Vector3(
-                    (Math.random() - 0.5) * 3,
-                    Math.random() * 3 + 1,
-                    (Math.random() - 0.5) * 3
+                    (Math.random() - 0.5) * 3, Math.random() * 3 + 1, (Math.random() - 0.5) * 3
                 ),
                 life: 1.0
             };
@@ -169,20 +161,23 @@ var Scene3D = (function () {
     }
 
     function update(gameState) {
-        if (!gameState || !gameState.snake) return;
-        updateSnake(gameState.snake);
+        if (!gameState) return;
+        updateSnake(gameState.snake || [], snakeMeshes1, HEAD_COLOR_1, BODY_COLOR_1);
+        updateSnake(gameState.snake2 || [], snakeMeshes2, HEAD_COLOR_2, BODY_COLOR_2);
         updateFood(gameState.food);
         updateParticles();
     }
 
-    function updateSnake(snakeData) {
-        snakeMeshes.forEach(function(m) { scene.remove(m); });
-        snakeMeshes = [];
+    function updateSnake(snakeData, meshArray, headColor, bodyColor) {
+        meshArray.forEach(function(m) { scene.remove(m); });
+        meshArray.length = 0;
+        if (!snakeData || snakeData.length === 0) return;
+
         var len = snakeData.length;
         snakeData.forEach(function(seg, i) {
             var mesh;
             if (i === 0) {
-                mesh = createSnakeSegment(true);
+                mesh = createSnakeSegment(true, headColor, bodyColor);
                 if (i < len - 1) {
                     var next = snakeData[i + 1];
                     var dx = seg.x - next.x;
@@ -192,14 +187,16 @@ var Scene3D = (function () {
                 }
             } else {
                 var t = i / (len - 1);
-                var r = 0x4c + Math.floor(t * 0x2e);
-                var g = 0xaf - Math.floor(t * 0x40);
-                var b = 0x50 - Math.floor(t * 0x20);
-                mesh = createSnakeSegment(false, (r << 16) | (g << 8) | b);
+                var baseColor = new THREE.Color(bodyColor);
+                var darkFactor = 0.6 + 0.4 * (1 - t);
+                var r = Math.floor(baseColor.r * 255 * darkFactor);
+                var g = Math.floor(baseColor.g * 255 * darkFactor);
+                var b = Math.floor(baseColor.b * 255 * darkFactor);
+                mesh = createSnakeSegment(false, headColor, (r << 16) | (g << 8) | b);
             }
             mesh.position.copy(gameToWorld(seg.x, seg.z, SNAKE_Y));
             scene.add(mesh);
-            snakeMeshes.push(mesh);
+            meshArray.push(mesh);
         });
     }
 
@@ -217,11 +214,7 @@ var Scene3D = (function () {
         var toRemove = [];
         particles.forEach(function(p, index) {
             p.age += dt;
-            if (p.age >= p.maxAge) {
-                scene.remove(p.group);
-                toRemove.push(index);
-                return;
-            }
+            if (p.age >= p.maxAge) { scene.remove(p.group); toRemove.push(index); return; }
             var progress = p.age / p.maxAge;
             p.group.children.forEach(function(particle) {
                 particle.position.x += particle.userData.velocity.x * dt;
@@ -277,11 +270,8 @@ var Scene3D = (function () {
     }
 
     return {
-        init: init,
-        update: update,
-        startRenderLoop: startRenderLoop,
-        stopRenderLoop: stopRenderLoop,
-        emitFoodParticles: emitFoodParticles,
-        dispose: dispose
+        init: init, update: update,
+        startRenderLoop: startRenderLoop, stopRenderLoop: stopRenderLoop,
+        emitFoodParticles: emitFoodParticles, dispose: dispose
     };
 })();
