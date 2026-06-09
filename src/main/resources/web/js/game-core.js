@@ -86,25 +86,39 @@ var GameEngine = (function () {
 
     function init() {
         var center = Math.floor(GRID_SIZE / 2);
-        // 玩家1：中间偏左
-        snake1 = [
-            { x: center - 1, z: center },
-            { x: center - 2, z: center },
-            { x: center - 3, z: center }
-        ];
-        direction1 = DIR.RIGHT;
-        nextDirection1 = DIR.RIGHT;
+
+        if (mode === MODE.TWO_PLAYER) {
+            // 双人：两蛇平行向上出发
+            snake1 = [
+                { x: center - 2, z: center },
+                { x: center - 2, z: center + 1 },
+                { x: center - 2, z: center + 2 }
+            ];
+            direction1 = DIR.UP;
+            nextDirection1 = DIR.UP;
+            snake2 = [
+                { x: center + 2, z: center },
+                { x: center + 2, z: center + 1 },
+                { x: center + 2, z: center + 2 }
+            ];
+            direction2 = DIR.UP;
+            nextDirection2 = DIR.UP;
+        } else {
+            // 单人：居中向右
+            snake1 = [
+                { x: center - 1, z: center },
+                { x: center - 2, z: center },
+                { x: center - 3, z: center }
+            ];
+            direction1 = DIR.RIGHT;
+            nextDirection1 = DIR.RIGHT;
+            snake2 = [];
+            direction2 = DIR.RIGHT;
+            nextDirection2 = DIR.RIGHT;
+        }
+
         score1 = 0;
         alive1 = true;
-
-        // 玩家2：中间偏右，方向向左
-        snake2 = [
-            { x: center + 1, z: center },
-            { x: center + 2, z: center },
-            { x: center + 3, z: center }
-        ];
-        direction2 = DIR.LEFT;
-        nextDirection2 = DIR.LEFT;
         score2 = 0;
         alive2 = true;
 
@@ -152,52 +166,49 @@ var GameEngine = (function () {
     function tick() {
         if (state !== STATE.PLAYING) return true;
 
-        // 应用缓冲方向
         if (nextDirection1) direction1 = nextDirection1;
         if (nextDirection2) direction2 = nextDirection2;
 
-        // === 移动玩家1 ===
+        // 同时计算两个蛇的新头部
+        var newHead1 = null, newHead2 = null;
         if (alive1) {
-            moveSnake(1, snake1, direction1, nextDirection1);
+            newHead1 = { x: snake1[0].x + direction1.x, z: snake1[0].z + direction1.z };
         }
-
-        // === 移动玩家2 ===
         if (mode === MODE.TWO_PLAYER && alive2) {
-            moveSnake(2, snake2, direction2, nextDirection2);
+            newHead2 = { x: snake2[0].x + direction2.x, z: snake2[0].z + direction2.z };
         }
 
-        // === 检查对战结束 ===
+        // 双人：头碰头 → 双亡平局
+        if (mode === MODE.TWO_PLAYER && newHead1 && newHead2 &&
+            newHead1.x === newHead2.x && newHead1.z === newHead2.z) {
+            killPlayer(1);
+            killPlayer(2);
+            endGame();
+            winner = 0;
+            return false;
+        }
+
+        // 分别移动（已使用同步计算的头部位置）
+        if (alive1 && newHead1) moveSnakeWithHead(1, snake1, newHead1);
+        if (mode === MODE.TWO_PLAYER && alive2 && newHead2) moveSnakeWithHead(2, snake2, newHead2);
+
+        // 结束判定
         if (mode === MODE.TWO_PLAYER) {
-            if (!alive1 && !alive2) {
-                winner = 0; // 平局
-                endGame();
-                return false;
-            } else if (!alive1 && alive2) {
-                winner = 2;
-                endGame();
-                return false;
-            } else if (alive1 && !alive2) {
-                winner = 1;
-                endGame();
-                return false;
-            }
+            if (!alive1 && !alive2) { winner = 0; endGame(); return false; }
+            else if (!alive1 && alive2) { winner = 2; endGame(); return false; }
+            else if (alive1 && !alive2) { winner = 1; endGame(); return false; }
         }
 
         fire('onUpdate', getPublicState());
         return state !== STATE.OVER;
     }
 
-    function moveSnake(playerNum, snakeArr, dir, nextDir) {
-        if (nextDir) dir = nextDir;
-        var head = snakeArr[0];
-        var newHead = { x: head.x + dir.x, z: head.z + dir.z };
-
+    function moveSnakeWithHead(playerNum, snakeArr, newHead) {
         // 撞墙
         if (newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.z < 0 || newHead.z >= GRID_SIZE) {
             killPlayer(playerNum);
             return;
         }
-
         // 撞自己
         for (var i = 0; i < snakeArr.length - 1; i++) {
             if (snakeArr[i].x === newHead.x && snakeArr[i].z === newHead.z) {
@@ -205,11 +216,12 @@ var GameEngine = (function () {
                 return;
             }
         }
-
-        // 撞对方蛇（双人模式）
+        // 撞对方蛇身（从头之后的节开始检查，因为头碰头已在 tick 中处理）
         if (mode === MODE.TWO_PLAYER) {
             var otherSnake = playerNum === 1 ? snake2 : snake1;
-            for (var j = 0; j < otherSnake.length; j++) {
+            var otherAlive = playerNum === 1 ? alive2 : alive1;
+            var startIdx = otherAlive ? 1 : 0;
+            for (var j = startIdx; j < otherSnake.length; j++) {
                 if (otherSnake[j].x === newHead.x && otherSnake[j].z === newHead.z) {
                     killPlayer(playerNum);
                     return;
@@ -217,10 +229,8 @@ var GameEngine = (function () {
             }
         }
 
-        // 移动
         snakeArr.unshift(newHead);
 
-        // 吃食物
         if (food && newHead.x === food.x && newHead.z === food.z) {
             if (playerNum === 1) {
                 score1 += SCORE_PER_FOOD;
@@ -230,10 +240,9 @@ var GameEngine = (function () {
                 fire('onScoreChange', { player: 2, score: score2 });
             }
             fire('onEatFood', food);
-
-            var foodEaten = Math.floor((score1 + score2) / SCORE_PER_FOOD);
-            if (foodEaten > 0 && foodEaten % FOOD_PER_SPEEDUP === 0) {
-                speed = Math.max(MIN_SPEED, INITIAL_SPEED - Math.floor(foodEaten / FOOD_PER_SPEEDUP) * SPEED_STEP);
+            var totalFood = Math.floor((score1 + score2) / SCORE_PER_FOOD);
+            if (totalFood > 0 && totalFood % FOOD_PER_SPEEDUP === 0) {
+                speed = Math.max(MIN_SPEED, INITIAL_SPEED - Math.floor(totalFood / FOOD_PER_SPEEDUP) * SPEED_STEP);
             }
             placeFood();
         } else {

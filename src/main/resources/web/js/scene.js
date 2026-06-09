@@ -163,7 +163,11 @@ var Scene3D = (function () {
     function update(gameState) {
         if (!gameState) return;
         updateSnake(gameState.snake || [], snakeMeshes1, HEAD_COLOR_1, BODY_COLOR_1);
-        updateSnake(gameState.snake2 || [], snakeMeshes2, HEAD_COLOR_2, BODY_COLOR_2);
+        if (gameState.mode === 'twoPlayer') {
+            updateSnake(gameState.snake2 || [], snakeMeshes2, HEAD_COLOR_2, BODY_COLOR_2);
+        } else {
+            updateSnake([], snakeMeshes2, HEAD_COLOR_2, BODY_COLOR_2);
+        }
         updateFood(gameState.food);
         updateParticles();
     }
