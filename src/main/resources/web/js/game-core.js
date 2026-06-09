@@ -18,6 +18,7 @@ var GameEngine = (function () {
     var STATE = { IDLE: 'idle', PLAYING: 'playing', PAUSED: 'paused', OVER: 'over' };
     var MODE = { SINGLE: 'single', TWO_PLAYER: 'twoPlayer' };
     var THEME = { DARK: 'dark', GREEN: 'green', DESERT: 'desert', ICE: 'ice' };
+    var DIFFICULTY = { EASY: 'easy', NORMAL: 'normal', HARD: 'hard' };
     var ITEM_TYPE = { SPEED: 'speed', SLOW: 'slow', SHIELD: 'shield', DOUBLE: 'double' };
 
     var DIR = {
@@ -29,6 +30,7 @@ var GameEngine = (function () {
 
     var mode = MODE.SINGLE;
     var theme = THEME.DARK;
+    var difficulty = DIFFICULTY.NORMAL;
 
     // 玩家状态
     var snake1 = [], direction1 = null, nextDirection1 = null, score1 = 0, alive1 = true;
@@ -79,14 +81,22 @@ var GameEngine = (function () {
 
     function setMode(m) { mode = m; }
     function setTheme(t) { theme = t; }
+    function setDifficulty(d) { difficulty = d; }
+    function getDifficulty() { return difficulty; }
 
     function setGridSize(size) {
         size = parseInt(size, 10) || 18;
         if (size < 10) size = 10;
         if (size > 30) size = 30;
         GRID_SIZE = size;
-        // 障碍物数量：小地图 6，中 10，大 16
-        obstacleCount = size <= 12 ? 6 : (size <= 18 ? 10 : 16);
+        // 障碍物数量：难度越低越少
+        if (difficulty === DIFFICULTY.EASY) {
+            obstacleCount = size <= 12 ? 2 : (size <= 18 ? 4 : 6);
+        } else if (difficulty === DIFFICULTY.HARD) {
+            obstacleCount = size <= 12 ? 10 : (size <= 18 ? 16 : 24);
+        } else {
+            obstacleCount = size <= 12 ? 6 : (size <= 18 ? 10 : 16);
+        }
         init();
     }
 
@@ -120,7 +130,10 @@ var GameEngine = (function () {
 
         score1 = 0; alive1 = true; shield1 = false; doubleScore1 = false;
         score2 = 0; alive2 = true; shield2 = false; doubleScore2 = false;
-        winner = null; speed = INITIAL_SPEED; state = STATE.IDLE;
+        winner = null;
+        // 难度影响速度: EASY=220, NORMAL=180, HARD=140
+        speed = difficulty === DIFFICULTY.EASY ? 220 : (difficulty === DIFFICULTY.HARD ? 140 : INITIAL_SPEED);
+        state = STATE.IDLE;
         items = []; itemTimer = 0;
         obstacles = [];
         placeObstacles();
@@ -388,6 +401,7 @@ var GameEngine = (function () {
         init: init, start: start, togglePause: togglePause, restart: restart,
         tick: tick, setDirection: setDirection, setDirectionP2: setDirectionP2,
         setMode: setMode, setGridSize: setGridSize, setTheme: setTheme,
+        setDifficulty: setDifficulty, getDifficulty: getDifficulty,
         getMode: getMode, getTheme: getTheme, getWinner: getWinner,
         getGridSize: getGridSize, getSnake: getSnake, getSnake2: getSnake2,
         getFood: getFood, getScore: getScore, getScore2: getScore2,
@@ -395,6 +409,6 @@ var GameEngine = (function () {
         getItems: getItems, getObstacles: getObstacles,
         hasShield1: hasShield1, hasShield2: hasShield2,
         isAlive1: isAlive1, isAlive2: isAlive2,
-        on: on, STATE: STATE, MODE: MODE, THEME: THEME, ITEM_TYPE: ITEM_TYPE, DIR: DIR
+        on: on, STATE: STATE, MODE: MODE, THEME: THEME, DIFFICULTY: DIFFICULTY, ITEM_TYPE: ITEM_TYPE, DIR: DIR
     };
 })();
