@@ -46,8 +46,8 @@ var GameEngine = (function () {
     // 道具
     var items = [];       // [{x, z, type}]
     var itemTimer = 0;    // tick counter for item spawning
-    var ITEM_SPAWN_INTERVAL = 15; // spawn item every N ticks
-    var ITEM_MAX = 2;     // max items on field
+    var ITEM_SPAWN_INTERVAL = 10; // 道具生成间隔（平衡食物频率）
+    var ITEM_MAX = 1;
 
     // 障碍物
     var obstacles = [];   // [{x, z}]
@@ -220,23 +220,23 @@ var GameEngine = (function () {
     function moveSnakeWithHead(playerNum, snakeArr, newHead) {
         // 撞墙
         if (newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.z < 0 || newHead.z >= GRID_SIZE) {
-            if (playerNum === 1 && shield1) { shield1 = false; return; }
-            if (playerNum === 2 && shield2) { shield2 = false; return; }
+            if (playerNum === 1 && shield1) { useShield(playerNum); return; }
+            if (playerNum === 2 && shield2) { useShield(playerNum); return; }
             killPlayer(playerNum); return;
         }
         // 撞自己
         for (var i = 0; i < snakeArr.length - 1; i++) {
             if (snakeArr[i].x === newHead.x && snakeArr[i].z === newHead.z) {
-                if (playerNum === 1 && shield1) { shield1 = false; return; }
-                if (playerNum === 2 && shield2) { shield2 = false; return; }
+                if (playerNum === 1 && shield1) { useShield(playerNum); return; }
+                if (playerNum === 2 && shield2) { useShield(playerNum); return; }
                 killPlayer(playerNum); return;
             }
         }
         // 撞障碍物
         for (var o = 0; o < obstacles.length; o++) {
             if (obstacles[o].x === newHead.x && obstacles[o].z === newHead.z) {
-                if (playerNum === 1 && shield1) { shield1 = false; return; }
-                if (playerNum === 2 && shield2) { shield2 = false; return; }
+                if (playerNum === 1 && shield1) { useShield(playerNum); return; }
+                if (playerNum === 2 && shield2) { useShield(playerNum); return; }
                 killPlayer(playerNum); return;
             }
         }
@@ -247,8 +247,8 @@ var GameEngine = (function () {
             var startIdx = otherAlive ? 1 : 0;
             for (var j = startIdx; j < otherSnake.length; j++) {
                 if (otherSnake[j].x === newHead.x && otherSnake[j].z === newHead.z) {
-                    if (playerNum === 1 && shield1) { shield1 = false; return; }
-                    if (playerNum === 2 && shield2) { shield2 = false; return; }
+                    if (playerNum === 1 && shield1) { useShield(playerNum); return; }
+                    if (playerNum === 2 && shield2) { useShield(playerNum); return; }
                     killPlayer(playerNum); return;
                 }
             }
@@ -309,6 +309,18 @@ var GameEngine = (function () {
         else { alive2 = false; snake2 = []; }
         fire('onSnakeDie', playerNum);
         if (mode === MODE.SINGLE) endGame();
+    }
+
+    function useShield(playerNum) {
+        if (playerNum === 1) {
+            shield1 = false;
+            direction1 = { x: -direction1.x, z: -direction1.z };
+            nextDirection1 = direction1;
+        } else {
+            shield2 = false;
+            direction2 = { x: -direction2.x, z: -direction2.z };
+            nextDirection2 = direction2;
+        }
     }
 
     function placeFood() {
