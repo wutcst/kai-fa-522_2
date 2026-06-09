@@ -1,229 +1,196 @@
 /**
- * main.js — Snake3D 主入口
+ * main.js — Snake3D 主入口（支持单/双人模式）
  *
  * [成员C — 入口 + UI 绑定]
- * 职责：连接 GameEngine（游戏逻辑）和 Scene3D（3D渲染）、
- *       键盘输入、UI 更新（分数/状态显示）
- *
- * 依赖：GameEngine (game-core.js), Scene3D (scene.js)
+ * 依赖：GameEngine, Scene3D
  */
 
 (function () {
     'use strict';
 
-    // === DOM 元素 ===
-    const gameContainer = document.getElementById('game-container');
-    const scoreDisplay = document.getElementById('score-display');
-    const speedDisplay = document.getElementById('speed-display');
-    const overlayStart = document.getElementById('overlay-start');
-    const overlayOver = document.getElementById('overlay-over');
-    const overlayPause = document.getElementById('overlay-pause');
-    const finalScore = document.getElementById('final-score');
-    const highScoreDisplay = document.getElementById('high-score');
-    const btnStart = document.getElementById('btn-start');
-    const btnRestart = document.getElementById('btn-restart');
+    var gameContainer = document.getElementById('game-container');
+    var scoreDisplay = document.getElementById('score-display');
+    var score2Display = document.getElementById('score2-display');
+    var speedDisplay = document.getElementById('speed-display');
+    var overlayStart = document.getElementById('overlay-start');
+    var overlayOver = document.getElementById('overlay-over');
+    var overlayPause = document.getElementById('overlay-pause');
+    var finalScore = document.getElementById('final-score');
+    var highScoreDisplay = document.getElementById('high-score');
+    var winnerText = document.getElementById('winner-text');
+    var btnStart = document.getElementById('btn-start');
+    var btnStart2P = document.getElementById('btn-start-2p');
+    var btnRestart = document.getElementById('btn-restart');
 
-    // === 游戏循环 ===
-    let gameTimer = null;
-    let highScore = 0;
+    var gameTimer = null;
+    var highScore = 0;
+    var isTwoPlayer = false;
 
-    // 加载最高分
     try {
-        const saved = localStorage.getItem('snake3d-highscore');
+        var saved = localStorage.getItem('snake3d-highscore');
         if (saved) highScore = parseInt(saved, 10) || 0;
-    } catch (e) { /* ignore */ }
+    } catch (e) {}
 
-    // === 初始化 ===
     function init() {
-        // 初始化 3D 场景
         Scene3D.init(gameContainer);
 
-        // 注册游戏引擎回调
         GameEngine.on('onUpdate', function (state) {
             Scene3D.update(state);
         });
 
-        GameEngine.on('onScoreChange', function (score) {
-            scoreDisplay.textContent = score;
-            updateSpeed(score);
+        GameEngine.on('onScoreChange', function (data) {
+            if (typeof data === 'object') {
+                if (data.player === 1) scoreDisplay.textContent = data.score;
+                else score2Display.textContent = data.score;
+            } else {
+                scoreDisplay.textContent = data;
+            }
+            updateSpeed(typeof data === 'object' ? data.score : data);
         });
 
         GameEngine.on('onEatFood', function (pos) {
             Scene3D.emitFoodParticles(pos);
         });
 
-        GameEngine.on('onGameOver', function (score) {
+        GameEngine.on('onSnakeDie', function (playerNum) {
+            // 双人模式淘汰特效（闪烁处理在渲染侧）
+        });
+
+        GameEngine.on('onGameOver', function (result) {
             stopGameLoop();
-            if (score > highScore) {
-                highScore = score;
-                try { localStorage.setItem('snake3d-highscore', highScore); } catch (e) {}
+            if (isTwoPlayer) {
+                var msg = result.winner === 1 ? '玩家1 获胜！' :
+                          result.winner === 2 ? '玩家2 获胜！' : '平局！';
+                winnerText.textContent = msg;
+                winnerText.style.color = result.winner === 1 ? '#4caf50' :
+                                        result.winner === 2 ? '#2196F3' : '#ffd700';
+            } else {
+                var score = result;
+                if (score > highScore) {
+                    highScore = score;
+                    try { localStorage.setItem('snake3d-highscore', highScore); } catch (e) {}
+                }
+                finalScore.textContent = score;
+                highScoreDisplay.textContent = highScore;
             }
             showOverlay(overlayOver);
-            finalScore.textContent = score;
-            highScoreDisplay.textContent = highScore;
         });
 
         GameEngine.on('onStateChange', function (state) {
-            if (state === GameEngine.STATE.PLAYING) {
-                hideAllOverlays();
-            } else if (state === GameEngine.STATE.PAUSED) {
-                overlayPause.style.display = 'flex';
-            }
+            if (state === GameEngine.STATE.PLAYING) hideAllOverlays();
+            else if (state === GameEngine.STATE.PAUSED) overlayPause.style.display = 'flex';
         });
 
-        // 初始渲染
-        Scene3D.update(GameEngine.getSnake ? {
-            snake: GameEngine.getSnake(),
-            food: GameEngine.getFood()
-        } : { snake: [], food: null });
-
-        // 开始渲染循环
+        Scene3D.update({ snake: [], snake2: [], food: null });
         Scene3D.startRenderLoop();
-
-        // 显示开始界面
         showOverlay(overlayStart);
         highScoreDisplay.textContent = highScore;
     }
 
-    /**
-     * 开始游戏
-     */
-    function startGame() {
+    function startGame(mode) {
+        isTwoPlayer = (mode === 'twoPlayer');
+        GameEngine.setMode(isTwoPlayer ? GameEngine.MODE.TWO_PLAYER : GameEngine.MODE.SINGLE);
         GameEngine.start();
         scoreDisplay.textContent = '0';
+        if (score2Display) score2Display.textContent = '0';
         updateSpeed(0);
+        // 双人模式显示两个分数
+        document.getElementById('hud-p2').style.display = isTwoPlayer ? 'block' : 'none';
         startGameLoop();
     }
 
-    /**
-     * 重新开始
-     */
     function restartGame() {
-        GameEngine.restart();
-        scoreDisplay.textContent = '0';
-        updateSpeed(0);
-        startGameLoop();
+        startGame(isTwoPlayer ? 'twoPlayer' : 'single');
     }
 
-    /**
-     * 启动游戏循环定时器
-     */
     function startGameLoop() {
         stopGameLoop();
         gameTimer = setInterval(function () {
-            const alive = GameEngine.tick();
-            if (!alive) {
-                stopGameLoop();
-            }
+            var alive = GameEngine.tick();
+            if (!alive) stopGameLoop();
         }, GameEngine.getSpeed());
     }
 
-    /**
-     * 停止游戏循环
-     */
     function stopGameLoop() {
-        if (gameTimer) {
-            clearInterval(gameTimer);
-            gameTimer = null;
-        }
+        if (gameTimer) { clearInterval(gameTimer); gameTimer = null; }
     }
 
-    /**
-     * 更新速度显示
-     */
     function updateSpeed(score) {
-        speedDisplay.textContent = 'Lv.' + (Math.floor(score / 50) + 1);
+        var s = typeof score === 'object' ? score : parseInt(score, 10) || 0;
+        speedDisplay.textContent = 'Lv.' + (Math.floor(s / 50) + 1);
     }
 
-    /**
-     * 显示遮罩层
-     */
     function showOverlay(overlay) {
         hideAllOverlays();
         overlay.style.display = 'flex';
     }
 
-    /**
-     * 隐藏所有遮罩
-     */
     function hideAllOverlays() {
         overlayStart.style.display = 'none';
         overlayOver.style.display = 'none';
         overlayPause.style.display = 'none';
     }
 
-    // === 键盘事件 ===
+    // === 键盘 ===
     document.addEventListener('keydown', function (e) {
-        const state = GameEngine.getState();
+        var state = GameEngine.getState();
+        var twoP = GameEngine.getMode() === GameEngine.MODE.TWO_PLAYER;
+        var alive1 = GameEngine.isAlive1 ? GameEngine.isAlive1() : true;
+        var alive2 = GameEngine.isAlive2 ? GameEngine.isAlive2() : true;
 
-        // 空格：开始 / 暂停
+        // Space
         if (e.code === 'Space' || e.key === ' ') {
             e.preventDefault();
-            if (state === GameEngine.STATE.IDLE) {
-                startGame();
-                return;
-            }
-            if (state === GameEngine.STATE.OVER) {
-                restartGame();
-                return;
-            }
+            if (state === GameEngine.STATE.IDLE) { startGame('single'); return; }
+            if (state === GameEngine.STATE.OVER) { restartGame(); return; }
             if (state === GameEngine.STATE.PLAYING || state === GameEngine.STATE.PAUSED) {
-                GameEngine.togglePause();
-                return;
+                GameEngine.togglePause(); return;
             }
         }
 
-        // 方向键 / WASD
         if (state !== GameEngine.STATE.PLAYING) return;
 
-        switch (e.code) {
-            case 'ArrowUp':    case 'KeyW':
-                e.preventDefault();
-                GameEngine.setDirection(GameEngine.DIR.UP);
-                break;
-            case 'ArrowDown':  case 'KeyS':
-                e.preventDefault();
-                GameEngine.setDirection(GameEngine.DIR.DOWN);
-                break;
-            case 'ArrowLeft':  case 'KeyA':
-                e.preventDefault();
-                GameEngine.setDirection(GameEngine.DIR.LEFT);
-                break;
-            case 'ArrowRight': case 'KeyD':
-                e.preventDefault();
-                GameEngine.setDirection(GameEngine.DIR.RIGHT);
-                break;
+        // P1: WASD
+        if (alive1) {
+            switch (e.code) {
+                case 'KeyW': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.UP); break;
+                case 'KeyS': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.DOWN); break;
+                case 'KeyA': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.LEFT); break;
+                case 'KeyD': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.RIGHT); break;
+            }
+        }
+
+        // P2: Arrow keys (only in two-player mode)
+        if (twoP && alive2) {
+            switch (e.code) {
+                case 'ArrowUp':    e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.UP); break;
+                case 'ArrowDown':  e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.DOWN); break;
+                case 'ArrowLeft':  e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.LEFT); break;
+                case 'ArrowRight': e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.RIGHT); break;
+            }
         }
     });
 
-    // === 按钮点击 ===
-    btnStart.addEventListener('click', startGame);
+    btnStart.addEventListener('click', function() { startGame('single'); });
+    btnStart2P.addEventListener('click', function() { startGame('twoPlayer'); });
     btnRestart.addEventListener('click', restartGame);
 
-    // === 移动端触摸支持 ===
-    let touchStartX = 0, touchStartY = 0;
+    // 移动端触摸（单人模式）
+    var touchStartX = 0, touchStartY = 0;
     gameContainer.addEventListener('touchstart', function (e) {
-        const touch = e.touches[0];
+        var touch = e.touches[0];
         touchStartX = touch.clientX;
         touchStartY = touch.clientY;
     });
 
     gameContainer.addEventListener('touchend', function (e) {
-        const state = GameEngine.getState();
-        if (state === GameEngine.STATE.IDLE) {
-            startGame();
-            return;
-        }
-        if (state === GameEngine.STATE.OVER) {
-            restartGame();
-            return;
-        }
+        var state = GameEngine.getState();
+        if (state === GameEngine.STATE.IDLE) { startGame('single'); return; }
+        if (state === GameEngine.STATE.OVER) { restartGame(); return; }
         if (state !== GameEngine.STATE.PLAYING) return;
-
-        const touch = e.changedTouches[0];
-        const dx = touch.clientX - touchStartX;
-        const dy = touch.clientY - touchStartY;
-
+        var touch = e.changedTouches[0];
+        var dx = touch.clientX - touchStartX;
+        var dy = touch.clientY - touchStartY;
         if (Math.abs(dx) > Math.abs(dy)) {
             GameEngine.setDirection(dx > 0 ? GameEngine.DIR.RIGHT : GameEngine.DIR.LEFT);
         } else {
@@ -231,7 +198,5 @@
         }
     });
 
-    // === 启动 ===
     init();
-
 })();

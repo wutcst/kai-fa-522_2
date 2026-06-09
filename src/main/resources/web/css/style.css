@@ -113,6 +113,39 @@ html, body {
     margin-bottom: 24px;
 }
 
+/* 双人模式按钮 */
+.mode-buttons {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.btn-blue {
+    background: #2196F3;
+    color: #ffffff;
+}
+
+.btn-blue:hover {
+    background: #1976D2;
+}
+
+/* P2 HUD 颜色 */
+#hud-p2 .hud-label {
+    color: #64B5F6;
+}
+
+#score2-display {
+    color: #2196F3;
+    font-size: 22px;
+}
+
+/* 双人结束界面 */
+#winner-text {
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
 .control-key {
     display: flex;
     align-items: center;
