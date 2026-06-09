@@ -102,10 +102,9 @@ kai-fa-522_2/
 
 | 成员 | GitHub | 负责模块 | 分支 |
 |------|--------|---------|------|
-| 陈健韬 | jettychen | 组长——项目初始化、游戏核心逻辑、技术栈重构、集成合并 | master / feature/game-logic |
-| 高有民 | cantabile-g | Three.js 3D 场景渲染、双蛇渲染、粒子特效 | feature/3d-render |
-| 赵昊德 | jet-isnt-haha | HTTP 服务器、UI 界面、CI/CD、README 文档 | feature/server-ui |
-| funnyjacy | funnyjacy | 游戏引擎单元测试、双人模式引擎、测试适配 | feature/game-test / feature/multiplayer |
+| 陈健韬 | jettychen / jet-isnt-haha | 组长——项目初始化、游戏核心逻辑、HTTP服务器、UI界面、CI/CD、集成合并 | master / feature/game-logic / feature/server-ui |
+| 高有民 | cantabile-g | Three.js 3D 场景渲染、双蛇渲染、粒子特效 | feature/3d-render / feature/multiplayer |
+| 赵昊德 | funnyjacy | 游戏引擎单元测试、双人模式引擎、测试适配 | feature/game-test / feature/multiplayer |
 
 ---
 
