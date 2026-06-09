@@ -85,12 +85,15 @@ kai-fa-522_2/
 | 组长/成员A | jettychen | 项目初始化 + 游戏核心逻辑 + 集成合并 | master / feature/game-logic |
 | 成员B | cantabile-g | Three.js 3D 场景搭建与渲染 | feature/3d-render |
 | 成员C | jet-isnt-haha | 服务器 + UI界面 + CI/CD + README | feature/server-ui |
+| 成员D | funnyjacy | 单元测试 + 双人模式引擎 | feature/game-test / feature/multiplayer |
 
 ### 分支模型
 - `master` — 稳定分支，只接受 PR 合并
 - `feature/game-logic` — 成员A：游戏逻辑
 - `feature/3d-render` — 成员B：3D 渲染
 - `feature/server-ui` — 成员C：服务器 + UI
+- `feature/game-test` — 成员D：单元测试
+- `feature/multiplayer` — 成员D/B/C：双人对战模式
 
 ### Commit 规范
 - 格式：`[模块] 简洁描述`
@@ -119,6 +122,7 @@ kai-fa-522_2/
 7. 暂停/继续（空格键）
 8. 重新开始
 9. 3D 渲染（蛇身、食物、网格、粒子特效）
+10. 单机双人对战模式（P1=WASD 绿蛇, P2=方向键 蓝蛇, 对抗淘汰制）
 
 ---
 
