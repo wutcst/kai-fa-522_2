@@ -23,6 +23,8 @@
     var selGridSize = document.getElementById('sel-grid-size');
     var selTheme = document.getElementById('sel-theme');
     var selDifficulty = document.getElementById('sel-difficulty');
+    var itemToast = document.getElementById('item-toast');
+    var toastTimer = null;
 
     // RAF 游戏循环
     var rafId = null;
@@ -61,6 +63,7 @@
 
         GameEngine.on('onEatItem', function (data) {
             if (data && data.pos) Scene3D.emitFoodParticles(data.pos);
+            if (data && data.type) showItemToast(data.type);
         });
 
         GameEngine.on('onSnakeDie', function () {});
@@ -94,6 +97,18 @@
         Scene3D.startRenderLoop();
         showOverlay(overlayStart);
         highScoreDisplay.textContent = highScore;
+    }
+
+    function showItemToast(type) {
+        if (toastTimer) clearTimeout(toastTimer);
+        var desc = GameEngine.getItemDesc(type);
+        itemToast.textContent = desc;
+        itemToast.className = 'item-toast ' + type;
+        itemToast.style.display = 'block';
+        itemToast.style.animation = 'none';
+        itemToast.offsetHeight;
+        itemToast.style.animation = 'toastFade 1.5s ease-out forwards';
+        toastTimer = setTimeout(function() { itemToast.style.display = 'none'; }, 1400);
     }
 
     function startGame(mode) {
@@ -186,20 +201,24 @@
         if (state !== GameEngine.STATE.PLAYING) return;
 
         if (al1) {
+            var turned = false;
             switch (e.code) {
-                case 'KeyW': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.UP); break;
-                case 'KeyS': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.DOWN); break;
-                case 'KeyA': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.LEFT); break;
-                case 'KeyD': e.preventDefault(); GameEngine.setDirection(GameEngine.DIR.RIGHT); break;
+                case 'KeyW': e.preventDefault(); turned = GameEngine.setDirection(GameEngine.DIR.UP); break;
+                case 'KeyS': e.preventDefault(); turned = GameEngine.setDirection(GameEngine.DIR.DOWN); break;
+                case 'KeyA': e.preventDefault(); turned = GameEngine.setDirection(GameEngine.DIR.LEFT); break;
+                case 'KeyD': e.preventDefault(); turned = GameEngine.setDirection(GameEngine.DIR.RIGHT); break;
             }
+            if (turned) accumulator = gameSpeed; // 即时响应
         }
         if (twoP && al2) {
+            var turned2 = false;
             switch (e.code) {
-                case 'ArrowUp':    e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.UP); break;
-                case 'ArrowDown':  e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.DOWN); break;
-                case 'ArrowLeft':  e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.LEFT); break;
-                case 'ArrowRight': e.preventDefault(); GameEngine.setDirectionP2(GameEngine.DIR.RIGHT); break;
+                case 'ArrowUp':    e.preventDefault(); turned2 = GameEngine.setDirectionP2(GameEngine.DIR.UP); break;
+                case 'ArrowDown':  e.preventDefault(); turned2 = GameEngine.setDirectionP2(GameEngine.DIR.DOWN); break;
+                case 'ArrowLeft':  e.preventDefault(); turned2 = GameEngine.setDirectionP2(GameEngine.DIR.LEFT); break;
+                case 'ArrowRight': e.preventDefault(); turned2 = GameEngine.setDirectionP2(GameEngine.DIR.RIGHT); break;
             }
+            if (turned2) accumulator = gameSpeed;
         }
     });
 
