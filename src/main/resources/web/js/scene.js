@@ -36,9 +36,8 @@ var Scene3D = (function () {
         applyTheme(currentTheme);
 
         var aspect = container.clientWidth / container.clientHeight;
-        camera = new THREE.PerspectiveCamera(50, aspect, 0.5, 100);
-        camera.position.set(14, 18, 14);
-        camera.lookAt(0, 0, 0);
+        camera = new THREE.PerspectiveCamera(50, aspect, 0.5, 200);
+        updateCameraForGridSize(currentGridSize);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
@@ -81,7 +80,22 @@ var Scene3D = (function () {
     function setGridSize(size) {
         currentGridSize = size;
         CENTER_OFFSET = (size - 1) / 2;
+        updateCameraForGridSize(size);
         rebuildFloorAndGrid(size);
+    }
+
+    function updateCameraForGridSize(size) {
+        if (!camera) return;
+        // 相机高度和距离根据地图大小自动调整
+        var camDist = size * 0.9;
+        var camHeight = size * 0.95;
+        camera.position.set(camDist, camHeight, camDist);
+        camera.lookAt(0, 0, 0);
+        // 雾距调整
+        if (scene && scene.fog) {
+            scene.fog.near = camDist * 1.2;
+            scene.fog.far = camDist * 3.5;
+        }
     }
 
     function rebuildFloorAndGrid(size) {
